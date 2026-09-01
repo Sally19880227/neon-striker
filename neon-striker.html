@@ -297,7 +297,12 @@ const FORM_NAMES = ['NORMAL','WING','DUAL WING','OVER DRIVE','AEGIS','NOVA'];
 
 let audioCtx = null;
 let bgmInterval = null;
-const BGM_PATTERN = [220,247,293,330,392,330,293,247,196,220,261,293,349,293,261,220];
+const BGM_PATTERN = [
+  196, 196, 294, 392, 392, 330, 294, 262,
+  196, 196, 294, 392, 392, 330, 294, 262,
+  220, 220, 330, 440, 440, 392, 330, 294,
+  262, 262, 392, 349, 349, 294, 262, 220
+];
 
 function ensureAudio(){
   const AudioCtor = window.AudioContext || window.webkitAudioContext;
@@ -358,15 +363,15 @@ function startBgm(){
   const tick = ()=>{
     if(state !== 'playing') return;
     const note = BGM_PATTERN[index % BGM_PATTERN.length];
-    playTone(note,0.18,'triangle',0.08);
-    playTone(note/2,0.24,'sine',0.05,0.03);
+    playTone(note,0.28,'triangle',0.07);
+    playTone(note/2,0.34,'sine',0.04,0.04);
     index++;
     if(state === 'playing'){
-      bgmInterval = setTimeout(tick, 180);
+      bgmInterval = setTimeout(tick, 260);
     }
   };
 
-  playTone(BGM_PATTERN[0],0.18,'triangle',0.08);
+  playTone(BGM_PATTERN[0],0.28,'triangle',0.07);
   tick();
 }
 
