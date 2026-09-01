@@ -328,10 +328,10 @@ const audioSettings = {
   sfx: Number(localStorage.getItem('neon-striker-sfx') ?? 0.9)
 };
 const BGM_PATTERN = [
-  196, 196, 294, 392, 392, 330, 294, 262,
-  196, 196, 294, 392, 392, 330, 294, 262,
-  220, 220, 330, 440, 440, 392, 330, 294,
-  262, 262, 392, 349, 349, 294, 262, 220
+  220, 262, 330, 392, 440, 392, 330, 294,
+  220, 262, 330, 392, 494, 440, 392, 330,
+  196, 247, 294, 349, 392, 349, 294, 262,
+  196, 247, 294, 349, 440, 392, 330, 262
 ];
 
 function saveAudioSettings(){
@@ -410,15 +410,16 @@ function startBgm(){
   const tick = ()=>{
     if(state !== 'playing') return;
     const note = BGM_PATTERN[index % BGM_PATTERN.length];
-    playTone(note,0.32,'triangle',0.18,0,'bgm');
-    playTone(note/2,0.38,'sine',0.12,0.04,'bgm');
+    playTone(note,0.42,'triangle',0.20,0,'bgm');
+    playTone(note/2,0.58,'sine',0.14,0.05,'bgm');
+    playTone(note*1.5,0.48,'sawtooth',0.05,0.08,'bgm');
     index++;
     if(state === 'playing'){
-      bgmInterval = setTimeout(tick, 260);
+      bgmInterval = setTimeout(tick, 300);
     }
   };
 
-  playTone(BGM_PATTERN[0],0.32,'triangle',0.18,0,'bgm');
+  playTone(BGM_PATTERN[0],0.42,'triangle',0.20,0,'bgm');
   tick();
 }
 
