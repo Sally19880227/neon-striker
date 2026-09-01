@@ -363,15 +363,15 @@ function startBgm(){
   const tick = ()=>{
     if(state !== 'playing') return;
     const note = BGM_PATTERN[index % BGM_PATTERN.length];
-    playTone(note,0.28,'triangle',0.07);
-    playTone(note/2,0.34,'sine',0.04,0.04);
+    playTone(note,0.32,'triangle',0.18);
+    playTone(note/2,0.38,'sine',0.12,0.04);
     index++;
     if(state === 'playing'){
       bgmInterval = setTimeout(tick, 260);
     }
   };
 
-  playTone(BGM_PATTERN[0],0.28,'triangle',0.07);
+  playTone(BGM_PATTERN[0],0.32,'triangle',0.18);
   tick();
 }
 
