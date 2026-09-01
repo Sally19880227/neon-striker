@@ -202,7 +202,10 @@
     <div class="stat-row">
       <div class="stat-box"><div class="n" id="clearScore">0</div><div class="l">SCORE</div></div>
     </div>
-    <button class="neon-btn" id="nextBtn">NEXT STAGE</button>
+    <div class="stat-row" style="margin-top:8px;">
+      <button class="neon-btn" id="nextBtn">NEXT STAGE</button>
+      <button class="neon-btn magenta" id="upgradeBtn">UPGRADE</button>
+    </div>
   </div>
 </div>
 
@@ -245,6 +248,7 @@ function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
 
 // ============ GAME STATE ============
 let state = 'start'; // start | playing | stageclear | gameover
+let resumeAfterUpgrade = false;
 let score = 0;
 let lives = 3;
 let stage = 1;

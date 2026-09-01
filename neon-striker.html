@@ -247,7 +247,10 @@
     <div class="stat-row">
       <div class="stat-box"><div class="n" id="clearScore">0</div><div class="l">SCORE</div></div>
     </div>
-    <button class="neon-btn" id="nextBtn">NEXT STAGE</button>
+    <div class="stat-row" style="margin-top:8px;">
+      <button class="neon-btn" id="nextBtn">NEXT STAGE</button>
+      <button class="neon-btn magenta" id="upgradeBtn">UPGRADE</button>
+    </div>
   </div>
 </div>
 
@@ -290,6 +293,7 @@ function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
 
 // ============ GAME STATE ============
 let state = 'start'; // start | playing | stageclear | gameover
+let resumeAfterUpgrade = false;
 let score = 0;
 let lives = 3;
 let stage = 1;
@@ -821,6 +825,7 @@ function triggerStageClear(){
   stopBgm();
   playSfx('stageclear');
   state = 'stageclear';
+  resumeAfterUpgrade = false;
   document.getElementById('clearScore').textContent = score.toLocaleString();
   document.getElementById('clearOverlay').classList.remove('hidden');
 }
@@ -828,7 +833,7 @@ function triggerStageClear(){
 function startGame(){
   ensureAudio();
   stopBgm();
-  score = 0; lives = 3; frame = 0; upgradePoints = 0; playerUpgrades.weapon = 0; playerUpgrades.shield = 0; playerUpgrades.engine = 0;
+  score = 0; lives = 3; frame = 0; stage = 1; upgradePoints = 0; playerUpgrades.weapon = 0; playerUpgrades.shield = 0; playerUpgrades.engine = 0;
   resetPlayer();
   playerBullets = []; enemyBullets = []; particles = [];
   updateUpgradePanel();
@@ -840,7 +845,24 @@ function startGame(){
   startStage(1);
 }
 
-document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  if(resumeAfterUpgrade){
+    resumeAfterUpgrade = false;
+    document.getElementById('startOverlay').classList.add('hidden');
+    document.getElementById('clearOverlay').classList.add('hidden');
+    resetPlayer();
+    playerBullets = []; enemyBullets = [];
+    state = 'playing';
+    startBgm();
+    if(stage >= MAX_STAGE){
+      startGame();
+      return;
+    }
+    startStage(stage + 1);
+    return;
+  }
+  startGame();
+});
 document.getElementById('retryBtn').addEventListener('click', startGame);
 ['weapon','shield','engine'].forEach((kind) => {
   const btn = document.getElementById('upgrade-' + kind);
@@ -861,6 +883,13 @@ document.getElementById('nextBtn').addEventListener('click', ()=>{
   state = 'playing';
   startBgm();
   startStage(stage+1);
+});
+document.getElementById('upgradeBtn').addEventListener('click', ()=>{
+  resumeAfterUpgrade = true;
+  document.getElementById('clearOverlay').classList.add('hidden');
+  document.getElementById('startOverlay').classList.remove('hidden');
+  state = 'start';
+  updateUpgradePanel();
 });
 
 // ============ UPDATE ============
