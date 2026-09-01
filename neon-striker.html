@@ -353,22 +353,32 @@ function startBgm(){
   if(bgmInterval) return;
   const ctx = ensureAudio();
   if(!ctx) return;
+
   let index = 0;
-  bgmInterval = setInterval(()=>{
+  const tick = ()=>{
     if(state !== 'playing') return;
     const note = BGM_PATTERN[index % BGM_PATTERN.length];
-    playTone(note,0.12,'triangle',0.018);
-    playTone(note/2,0.15,'sine',0.012,0.03);
+    playTone(note,0.18,'triangle',0.08);
+    playTone(note/2,0.24,'sine',0.05,0.03);
     index++;
-  },180);
+    if(state === 'playing'){
+      bgmInterval = setTimeout(tick, 180);
+    }
+  };
+
+  playTone(BGM_PATTERN[0],0.18,'triangle',0.08);
+  tick();
 }
 
 function stopBgm(){
   if(bgmInterval){
-    clearInterval(bgmInterval);
+    clearTimeout(bgmInterval);
     bgmInterval = null;
   }
 }
+
+window.addEventListener('pointerdown', ()=>{ ensureAudio(); }, { once: true });
+window.addEventListener('keydown', ()=>{ ensureAudio(); }, { once: true });
 
 let player = {
   x: CW/2, y: CH-110,
