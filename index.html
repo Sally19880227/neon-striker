@@ -169,6 +169,7 @@
       <div class="hud-block">
         <div id="stageTag">STAGE 1</div>
         <div id="formTag">FORM: NORMAL</div>
+        <div id="upgradeTag" style="margin-top:4px; color:var(--neon-yellow); font-size:11px; letter-spacing:1px;">POINTS: 0</div>
       </div>
     </div>
   </div>
@@ -254,6 +255,91 @@ let bossSpawned = false;
 let bossActive = false;
 let stageEndTimer = 0;
 let screenShake = 0;
+
+const STAGE_THEMES = [
+  { name:'CYBER DAWN', accent:'#3ef2ff', accent2:'#ff3ec8', accent3:'#ffe93e', bgTop:'#0a0620', bgMid:'#05030f', bgBottom:'#020108', panel:'rgba(8,6,24,0.72)', star:'#d8f9ff', grid:'rgba(62,242,255,0.08)' },
+  { name:'EMBER RUSH', accent:'#ff7a59', accent2:'#ff3ec8', accent3:'#ffd166', bgTop:'#1c090d', bgMid:'#12050d', bgBottom:'#080208', panel:'rgba(32,12,18,0.72)', star:'#ffe0cf', grid:'rgba(255,122,89,0.08)' },
+  { name:'AURORA HIVE', accent:'#5ef7d4', accent2:'#3ef2ff', accent3:'#e5ff7a', bgTop:'#081820', bgMid:'#07151d', bgBottom:'#040a12', panel:'rgba(9,22,28,0.72)', star:'#dcfff9', grid:'rgba(94,247,212,0.08)' },
+  { name:'VOID VIOLET', accent:'#b392ff', accent2:'#ff7ad9', accent3:'#f3f7ff', bgTop:'#120b22', bgMid:'#090612', bgBottom:'#04040d', panel:'rgba(20,11,32,0.72)', star:'#efe8ff', grid:'rgba(179,146,255,0.08)' },
+  { name:'SOLAR WARP', accent:'#ffd166', accent2:'#ff5ea8', accent3:'#8ae9ff', bgTop:'#1b1308', bgMid:'#110d06', bgBottom:'#07070a', panel:'rgba(28,19,11,0.72)', star:'#fff4d6', grid:'rgba(255,209,102,0.08)' },
+  { name:'FINAL FLASH', accent:'#7ef9ff', accent2:'#ff4fd8', accent3:'#fff2a6', bgTop:'#090d22', bgMid:'#090612', bgBottom:'#02040d', panel:'rgba(9,13,34,0.72)', star:'#e6f7ff', grid:'rgba(126,249,255,0.09)' }
+];
+
+function getStageTheme(n){
+  return STAGE_THEMES[(n - 1 + STAGE_THEMES.length) % STAGE_THEMES.length];
+}
+
+function applyStageTheme(n){
+  const theme = getStageTheme(n);
+  document.documentElement.style.setProperty('--neon-cyan', theme.accent);
+  document.documentElement.style.setProperty('--neon-magenta', theme.accent2);
+  document.documentElement.style.setProperty('--neon-yellow', theme.accent3);
+  document.documentElement.style.setProperty('--deep-space', theme.bgBottom);
+  document.documentElement.style.setProperty('--panel-bg', theme.panel);
+
+  const banner = document.getElementById('stageBanner');
+  if(banner){
+    banner.style.color = '#fff';
+    banner.style.textShadow = '0 0 20px ' + theme.accent + ', 0 0 40px ' + theme.accent2;
+  }
+  return theme;
+}
+
+function resetUpgradeState(){
+  upgradePoints = 0;
+  playerUpgrades.weapon = 0;
+  playerUpgrades.shield = 0;
+  playerUpgrades.engine = 0;
+  if(player){
+    player.speed = 5.2;
+  }
+  updateHUD();
+  updateUpgradePanel();
+}
+
+function awardUpgradePoints(amount){
+  upgradePoints += amount;
+  updateHUD();
+  updateUpgradePanel();
+}
+
+function applyShipUpgrades(){
+  player.speed = 5.2 + playerUpgrades.engine * 0.35;
+  if (playerUpgrades.shield > 0) {
+    player.maxShield = 3 + playerUpgrades.shield;
+  } else {
+    player.maxShield = 3;
+  }
+}
+
+function spendUpgrade(kind){
+  const cost = UPGRADE_COSTS[kind] + playerUpgrades[kind] * 6;
+  if(upgradePoints < cost) return;
+  upgradePoints -= cost;
+  playerUpgrades[kind] += 1;
+  applyShipUpgrades();
+  updateHUD();
+  updateUpgradePanel();
+  showStageBanner('UPGRADED', kind.toUpperCase());
+}
+
+function updateUpgradePanel(){
+  const pointsEl = document.getElementById('upgradePointsValue');
+  if(pointsEl){ pointsEl.textContent = String(upgradePoints); }
+
+  ['weapon','shield','engine'].forEach((kind) => {
+    const btn = document.getElementById('upgrade-' + kind);
+    const label = document.getElementById('upgrade-' + kind + '-label');
+    if(!btn) return;
+    const cost = UPGRADE_COSTS[kind] + playerUpgrades[kind] * 6;
+    btn.disabled = upgradePoints < cost;
+    if(label){
+      label.textContent = kind === 'weapon' ? 'WEAPON ' + playerUpgrades[kind] + ' / COST ' + cost :
+                         kind === 'shield' ? 'SHIELD ' + playerUpgrades[kind] + ' / COST ' + cost :
+                         'ENGINE ' + playerUpgrades[kind] + ' / COST ' + cost;
+    }
+  });
+}
 
 // starfield
 let stars = [];
@@ -377,7 +463,8 @@ let player = {
   form: FORM.NORMAL,
   fireCooldown: 0,
   invuln: 0,
-  trail: []
+  trail: [],
+  shieldHits: 1
 };
 
 function resetPlayer(){
@@ -386,6 +473,7 @@ function resetPlayer(){
   player.fireCooldown = 0;
   player.invuln = 90;
   player.trail = [];
+  applyShipUpgrades();
 }
 
 // input
@@ -427,72 +515,76 @@ let items = [];
 
 function firePlayerBullets(){
   const bx = player.x, by = player.y - player.h/2;
+  const weaponBoost = 1 + playerUpgrades.weapon * 0.35;
+
   if(player.form === FORM.NORMAL){
-    playerBullets.push({x:bx, y:by, vx:0, vy:-9, w:4, h:12, dmg:1, color:'#3ef2ff'});
+    playerBullets.push({x:bx, y:by, vx:0, vy:-9, w:4, h:12, dmg:1 * weaponBoost, color:'#3ef2ff'});
   } else if(player.form === FORM.WING){
-    playerBullets.push({x:bx-8, y:by+6, vx:-0.5, vy:-8.8, w:4, h:11, dmg:1, color:'#3ef2ff'});
-    playerBullets.push({x:bx+8, y:by+6, vx:0.5, vy:-8.8, w:4, h:11, dmg:1, color:'#3ef2ff'});
-    playerBullets.push({x:bx, y:by, vx:0, vy:-9.5, w:4, h:14, dmg:1, color:'#fff'});
+    playerBullets.push({x:bx-8, y:by+6, vx:-0.5, vy:-8.8, w:4, h:11, dmg:1 * weaponBoost, color:'#3ef2ff'});
+    playerBullets.push({x:bx+8, y:by+6, vx:0.5, vy:-8.8, w:4, h:11, dmg:1 * weaponBoost, color:'#3ef2ff'});
+    playerBullets.push({x:bx, y:by, vx:0, vy:-9.5, w:4, h:14, dmg:1 * weaponBoost, color:'#fff'});
   } else if(player.form === FORM.DUAL){
-    playerBullets.push({x:bx-12, y:by+4, vx:-0.8, vy:-9.2, w:4, h:12, dmg:1, color:'#3ef2ff'});
-    playerBullets.push({x:bx+12, y:by+4, vx:0.8, vy:-9.2, w:4, h:12, dmg:1, color:'#3ef2ff'});
-    playerBullets.push({x:bx-22, y:by+12, vx:-1.5, vy:-8.8, w:3, h:10, dmg:1, color:'#ff3ec8'});
-    playerBullets.push({x:bx+22, y:by+12, vx:1.5, vy:-8.8, w:3, h:10, dmg:1, color:'#ff3ec8'});
-    playerBullets.push({x:bx, y:by, vx:0, vy:-10.2, w:5, h:15, dmg:2, color:'#fff'});
+    playerBullets.push({x:bx-12, y:by+4, vx:-0.8, vy:-9.2, w:4, h:12, dmg:1 * weaponBoost, color:'#3ef2ff'});
+    playerBullets.push({x:bx+12, y:by+4, vx:0.8, vy:-9.2, w:4, h:12, dmg:1 * weaponBoost, color:'#3ef2ff'});
+    playerBullets.push({x:bx-22, y:by+12, vx:-1.5, vy:-8.8, w:3, h:10, dmg:1 * weaponBoost, color:'#ff3ec8'});
+    playerBullets.push({x:bx+22, y:by+12, vx:1.5, vy:-8.8, w:3, h:10, dmg:1 * weaponBoost, color:'#ff3ec8'});
+    playerBullets.push({x:bx, y:by, vx:0, vy:-10.2, w:5, h:15, dmg:2 * weaponBoost, color:'#fff'});
   } else if(player.form === FORM.BLADE){
-    playerBullets.push({x:bx, y:by, vx:0, vy:-10.8, w:5, h:16, dmg:2, color:'#fff'});
-    playerBullets.push({x:bx-14, y:by+8, vx:-1.6, vy:-9.5, w:4, h:12, dmg:1, color:'#ff3ec8'});
-    playerBullets.push({x:bx+14, y:by+8, vx:1.6, vy:-9.5, w:4, h:12, dmg:1, color:'#ff3ec8'});
-    playerBullets.push({x:bx-22, y:by+16, vx:-2.4, vy:-8.8, w:3, h:10, dmg:1, color:'#ffe93e'});
-    playerBullets.push({x:bx+22, y:by+16, vx:2.4, vy:-8.8, w:3, h:10, dmg:1, color:'#ffe93e'});
+    playerBullets.push({x:bx, y:by, vx:0, vy:-10.8, w:5, h:16, dmg:2 * weaponBoost, color:'#fff'});
+    playerBullets.push({x:bx-14, y:by+8, vx:-1.6, vy:-9.5, w:4, h:12, dmg:1 * weaponBoost, color:'#ff3ec8'});
+    playerBullets.push({x:bx+14, y:by+8, vx:1.6, vy:-9.5, w:4, h:12, dmg:1 * weaponBoost, color:'#ff3ec8'});
+    playerBullets.push({x:bx-22, y:by+16, vx:-2.4, vy:-8.8, w:3, h:10, dmg:1 * weaponBoost, color:'#ffe93e'});
+    playerBullets.push({x:bx+22, y:by+16, vx:2.4, vy:-8.8, w:3, h:10, dmg:1 * weaponBoost, color:'#ffe93e'});
   } else if(player.form === FORM.AEGIS){
-    playerBullets.push({x:bx, y:by, vx:0, vy:-11.6, w:5, h:18, dmg:2, color:'#fff'});
-    playerBullets.push({x:bx-18, y:by+8, vx:-2.2, vy:-10.2, w:4, h:12, dmg:2, color:'#3ef2ff'});
-    playerBullets.push({x:bx+18, y:by+8, vx:2.2, vy:-10.2, w:4, h:12, dmg:2, color:'#3ef2ff'});
-    playerBullets.push({x:bx-30, y:by+16, vx:-2.8, vy:-9.6, w:3, h:10, dmg:1, color:'#ffe93e'});
-    playerBullets.push({x:bx+30, y:by+16, vx:2.8, vy:-9.6, w:3, h:10, dmg:1, color:'#ffe93e'});
-    playerBullets.push({x:bx-10, y:by+18, vx:-0.6, vy:-9.2, w:4, h:12, dmg:1, color:'#ff3ec8'});
-    playerBullets.push({x:bx+10, y:by+18, vx:0.6, vy:-9.2, w:4, h:12, dmg:1, color:'#ff3ec8'});
+    playerBullets.push({x:bx, y:by, vx:0, vy:-11.6, w:5, h:18, dmg:2 * weaponBoost, color:'#fff'});
+    playerBullets.push({x:bx-18, y:by+8, vx:-2.2, vy:-10.2, w:4, h:12, dmg:2 * weaponBoost, color:'#3ef2ff'});
+    playerBullets.push({x:bx+18, y:by+8, vx:2.2, vy:-10.2, w:4, h:12, dmg:2 * weaponBoost, color:'#3ef2ff'});
+    playerBullets.push({x:bx-30, y:by+16, vx:-2.8, vy:-9.6, w:3, h:10, dmg:1 * weaponBoost, color:'#ffe93e'});
+    playerBullets.push({x:bx+30, y:by+16, vx:2.8, vy:-9.6, w:3, h:10, dmg:1 * weaponBoost, color:'#ffe93e'});
+    playerBullets.push({x:bx-10, y:by+18, vx:-0.6, vy:-9.2, w:4, h:12, dmg:1 * weaponBoost, color:'#ff3ec8'});
+    playerBullets.push({x:bx+10, y:by+18, vx:0.6, vy:-9.2, w:4, h:12, dmg:1 * weaponBoost, color:'#ff3ec8'});
   } else if(player.form === FORM.NOVA){
     const spread = [-0.9,-0.5,0,0.5,0.9];
     for(let i=0;i<spread.length;i++){
-      playerBullets.push({x:bx, y:by, vx:spread[i]*2.3, vy:-12.5, w:5, h:18, dmg:3, color:'#fff'});
+      playerBullets.push({x:bx, y:by, vx:spread[i]*2.3, vy:-12.5, w:5, h:18, dmg:3 * weaponBoost, color:'#fff'});
     }
-    playerBullets.push({x:bx-20, y:by+12, vx:-3.2, vy:-10.8, w:4, h:12, dmg:2, color:'#3ef2ff'});
-    playerBullets.push({x:bx+20, y:by+12, vx:3.2, vy:-10.8, w:4, h:12, dmg:2, color:'#3ef2ff'});
-    playerBullets.push({x:bx-32, y:by+22, vx:-3.8, vy:-9.6, w:3, h:10, dmg:2, color:'#ff3ec8'});
-    playerBullets.push({x:bx+32, y:by+22, vx:3.8, vy:-9.6, w:3, h:10, dmg:2, color:'#ff3ec8'});
-    playerBullets.push({x:bx-10, y:by+18, vx:-1.1, vy:-10.4, w:4, h:12, dmg:2, color:'#ffe93e'});
-    playerBullets.push({x:bx+10, y:by+18, vx:1.1, vy:-10.4, w:4, h:12, dmg:2, color:'#ffe93e'});
+    playerBullets.push({x:bx-20, y:by+12, vx:-3.2, vy:-10.8, w:4, h:12, dmg:2 * weaponBoost, color:'#3ef2ff'});
+    playerBullets.push({x:bx+20, y:by+12, vx:3.2, vy:-10.8, w:4, h:12, dmg:2 * weaponBoost, color:'#3ef2ff'});
+    playerBullets.push({x:bx-32, y:by+22, vx:-3.8, vy:-9.6, w:3, h:10, dmg:2 * weaponBoost, color:'#ff3ec8'});
+    playerBullets.push({x:bx+32, y:by+22, vx:3.8, vy:-9.6, w:3, h:10, dmg:2 * weaponBoost, color:'#ff3ec8'});
+    playerBullets.push({x:bx-10, y:by+18, vx:-1.1, vy:-10.4, w:4, h:12, dmg:2 * weaponBoost, color:'#ffe93e'});
+    playerBullets.push({x:bx+10, y:by+18, vx:1.1, vy:-10.4, w:4, h:12, dmg:2 * weaponBoost, color:'#ffe93e'});
   }
 }
 
 function spawnEnemy(type){
+  const theme = getStageTheme(stage);
   const x = rand(30, CW-30);
   const base = {
     x, y:-30, w:26, h:26, vx:0, vy: rand(1.4,2.2),
     hp:1, maxHp:1, type, t:0, fireCooldown:randInt(40,90),
-    color:'#ff3ec8', score:100
+    color: theme.accent2, score:100
   };
   if(type === 'drifter'){
-    base.hp=1; base.color='#ff3ec8'; base.score=100;
+    base.hp=1; base.color = (stage % 2 === 0) ? theme.accent : theme.accent2; base.score=100;
     base.vx = rand(-0.6,0.6);
   } else if(type === 'zigzag'){
-    base.hp=2; base.color='#ffe93e'; base.score=150; base.w=24; base.h=24;
+    base.hp=2; base.color = theme.accent3; base.score=150; base.w=24; base.h=24;
   } else if(type === 'tank'){
-    base.hp=6; base.maxHp=6; base.color='#8b6cff'; base.score=350; base.w=40; base.h=36; base.vy=rand(0.7,1.1);
+    base.hp=6; base.maxHp=6; base.color = theme.accent; base.score=350; base.w=40; base.h=36; base.vy=rand(0.7,1.1);
   } else if(type === 'shooter'){
-    base.hp=3; base.color='#3ef2ff'; base.score=220; base.w=28; base.h=28; base.vy=rand(1,1.4);
+    base.hp=3; base.color = theme.accent2; base.score=220; base.w=28; base.h=28; base.vy=rand(1,1.4);
   }
   enemies.push(base);
 }
 
 function spawnBoss(){
+  const theme = getStageTheme(stage);
   const hp = 60 + stage*40;
   enemies.push({
     x: CW/2, y:-80, w:120, h:90, vx:1.4, vy:0.6,
     hp, maxHp:hp, type:'boss', t:0, fireCooldown:60,
-    color:'#ff3ec8', score:5000, phase:0, entering:true
+    color: theme.accent2, score:5000, phase:0, entering:true
   });
   bossActive = true;
 }
@@ -558,6 +650,17 @@ function rectHit(ax,ay,aw,ah,bx,by,bw,bh){
 
 function damagePlayer(){
   if(player.invuln > 0) return;
+
+  if(player.shieldHits > 1){
+    player.shieldHits--;
+    player.invuln = 60;
+    screenShake = 8;
+    explode(player.x, player.y, '#5ef7d4', 18, {speed:4});
+    playSfx('power');
+    updateHUD();
+    return;
+  }
+
   lives--;
   player.invuln = 120;
   screenShake = 16;
@@ -575,6 +678,8 @@ function updateHUD(){
   document.getElementById('scoreVal').textContent = score.toLocaleString();
   document.getElementById('stageTag').textContent = 'STAGE ' + stage;
   document.getElementById('formTag').textContent = 'FORM: ' + FORM_NAMES[player.form];
+  const upgradeTag = document.getElementById('upgradeTag');
+  if(upgradeTag){ upgradeTag.textContent = 'POINTS: ' + upgradePoints; }
   const row = document.getElementById('livesRow');
   row.innerHTML = '';
   for(let i=0;i<Math.max(lives,0);i++){
@@ -596,12 +701,13 @@ const STAGE_LENGTH = 1900; // frames per stage before boss
 
 function startStage(n){
   stage = n;
+  const theme = applyStageTheme(n);
   stageTimer = 0;
   bossSpawned = false;
   bossActive = false;
   enemies = []; enemyBullets = []; items = [];
   updateHUD();
-  showStageBanner('STAGE ' + n, n===MAX_STAGE ? 'FINAL STAGE' : '');
+  showStageBanner(theme.name, n===MAX_STAGE ? 'FINAL STAGE' : '');
 }
 
 function triggerGameOver(){
@@ -624,9 +730,10 @@ function triggerStageClear(){
 function startGame(){
   ensureAudio();
   stopBgm();
-  score = 0; lives = 3; frame = 0;
+  score = 0; lives = 3; frame = 0; upgradePoints = 0; playerUpgrades.weapon = 0; playerUpgrades.shield = 0; playerUpgrades.engine = 0;
   resetPlayer();
   playerBullets = []; enemyBullets = []; particles = [];
+  applyShipUpgrades();
   state = 'playing';
   document.getElementById('startOverlay').classList.add('hidden');
   document.getElementById('gameOverOverlay').classList.add('hidden');
@@ -637,6 +744,13 @@ function startGame(){
 
 document.getElementById('startBtn').addEventListener('click', startGame);
 document.getElementById('retryBtn').addEventListener('click', startGame);
+['weapon','shield','engine'].forEach((kind) => {
+  const btn = document.getElementById('upgrade-' + kind);
+  if(btn){
+    btn.addEventListener('click', () => spendUpgrade(kind));
+  }
+});
+updateUpgradePanel();
 document.getElementById('nextBtn').addEventListener('click', ()=>{
   ensureAudio();
   document.getElementById('clearOverlay').classList.add('hidden');
@@ -654,6 +768,10 @@ document.getElementById('nextBtn').addEventListener('click', ()=>{
 // ============ UPDATE ============
 function updatePlayer(){
   if(player.invuln>0) player.invuln--;
+
+  if (playerUpgrades.engine > 0) {
+    player.speed = 5.2 + playerUpgrades.engine * 0.35;
+  }
 
   let dx=0, dy=0;
   if(keys['arrowleft']||keys['a']) dx -= 1;
@@ -718,6 +836,7 @@ function handleCollisions(){
         explode(b.x,b.y,'#3ef2ff',4,{speed:2});
         if(e.hp<=0){
           score += e.score;
+          awardUpgradePoints(e.type === 'boss' ? 20 : 6);
           screenShake = Math.max(screenShake, e.type==='boss'?24:4);
           explode(e.x,e.y, e.color, e.type==='boss'?60:18, {speed: e.type==='boss'?8:4});
           if(e.type !== 'boss'){
@@ -774,12 +893,15 @@ function handleCollisions(){
         } else {
           score += 200;
         }
+        awardUpgradePoints(4);
       } else if(it.type==='life'){
         lives = Math.min(lives+1, 6);
         playSfx('life');
         explode(player.x,player.y,'#3effa0',20,{speed:4});
+        awardUpgradePoints(3);
       } else if(it.type==='score'){
         score += 300;
+        awardUpgradePoints(15);
       }
       updateHUD();
     }
@@ -835,16 +957,17 @@ function update(){
 
 // ============ DRAW ============
 function drawBackground(){
+  const theme = getStageTheme(stage);
   const g = ctx.createLinearGradient(0,0,0,CH);
-  g.addColorStop(0,'#0a0620');
-  g.addColorStop(0.5,'#05030f');
-  g.addColorStop(1,'#020108');
+  g.addColorStop(0, theme.bgTop);
+  g.addColorStop(0.5, theme.bgMid);
+  g.addColorStop(1, theme.bgBottom);
   ctx.fillStyle = g;
   ctx.fillRect(0,0,CW,CH);
 
   stars.forEach(s=>{
     ctx.globalAlpha = 0.4 + s.z*0.6;
-    ctx.fillStyle = '#bfe8ff';
+    ctx.fillStyle = theme.star;
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
     ctx.fill();
@@ -852,10 +975,13 @@ function drawBackground(){
   ctx.globalAlpha = 1;
 
   // subtle grid glow lines
-  ctx.strokeStyle = 'rgba(62,242,255,0.05)';
+  ctx.strokeStyle = theme.grid;
   ctx.lineWidth = 1;
   for(let x=0;x<CW;x+=60){
     ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CH); ctx.stroke();
+  }
+  for(let y=0;y<CH;y+=60){
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CW,y); ctx.stroke();
   }
 }
 
